@@ -108,6 +108,7 @@ class Events
                         'from_cid' => $new_message['from_client_id'],
                         'to_cid'   => $new_message['to_client_id'],
                         'from_name' => $new_message['from_client_name'],
+                        'content'  => nl2br(htmlspecialchars($message_data['content'])),
                         'time'     => $new_message['time']
                     ))->query();
                     Gateway::sendToClient($message_data['to_client_id'], json_encode($new_message));
