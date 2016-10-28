@@ -21,9 +21,10 @@
 
 /**
  * 聊天主逻辑
- * 主要是处理 onMessage onClose 
+ * 主要是处理 onMessage onClose
  */
 use \GatewayWorker\Lib\Gateway;
+use \GatewayWorker\Lib\Db;
 
 class Events
 {
@@ -36,14 +37,14 @@ class Events
    {
         // debug
         echo "client:{$_SERVER['REMOTE_ADDR']}:{$_SERVER['REMOTE_PORT']} gateway:{$_SERVER['GATEWAY_ADDR']}:{$_SERVER['GATEWAY_PORT']}  client_id:$client_id session:".json_encode($_SESSION)." onMessage:".$message."\n";
-        
+
         // 客户端传递的是json数据
         $message_data = json_decode($message, true);
         if(!$message_data)
         {
             return ;
         }
-        
+
         // 根据类型执行不同的业务
         switch($message_data['type'])
         {
@@ -57,31 +58,31 @@ class Events
                 {
                     throw new \Exception("\$message_data['room_id'] not set. client_ip:{$_SERVER['REMOTE_ADDR']} \$message:$message");
                 }
-                
+
                 // 把房间号昵称放到session中
                 $room_id = $message_data['room_id'];
                 $client_name = htmlspecialchars($message_data['client_name']);
                 $_SESSION['room_id'] = $room_id;
                 $_SESSION['client_name'] = $client_name;
-              
-                // 获取房间内所有用户列表 
+
+                // 获取房间内所有用户列表
                 $clients_list = Gateway::getClientSessionsByGroup($room_id);
                 foreach($clients_list as $tmp_client_id=>$item)
                 {
                     $clients_list[$tmp_client_id] = $item['client_name'];
                 }
                 $clients_list[$client_id] = $client_name;
-                
-                // 转播给当前房间的所有客户端，xx进入聊天室 message {type:login, client_id:xx, name:xx} 
+
+                // 转播给当前房间的所有客户端，xx进入聊天室 message {type:login, client_id:xx, name:xx}
                 $new_message = array('type'=>$message_data['type'], 'client_id'=>$client_id, 'client_name'=>htmlspecialchars($client_name), 'time'=>date('Y-m-d H:i:s'));
                 Gateway::sendToGroup($room_id, json_encode($new_message));
                 Gateway::joinGroup($client_id, $room_id);
-               
-                // 给当前用户发送用户列表 
+
+                // 给当前用户发送用户列表
                 $new_message['client_list'] = $clients_list;
                 Gateway::sendToCurrentClient(json_encode($new_message));
                 return;
-                
+
             // 客户端发言 message: {type:say, to_client_id:xx, content:xx}
             case 'say':
                 // 非法请求
@@ -91,25 +92,31 @@ class Events
                 }
                 $room_id = $_SESSION['room_id'];
                 $client_name = $_SESSION['client_name'];
-                
+
                 // 私聊
                 if($message_data['to_client_id'] != 'all')
                 {
                     $new_message = array(
                         'type'=>'say',
-                        'from_client_id'=>$client_id, 
+                        'from_client_id'=>$client_id,
                         'from_client_name' =>$client_name,
                         'to_client_id'=>$message_data['to_client_id'],
                         'content'=>"<b>对你说: </b>".nl2br(htmlspecialchars($message_data['content'])),
                         'time'=>date('Y-m-d H:i:s'),
                     );
+                    Db::instance('db1')->insert('chat_messages')->cols(array(
+                        'from_cid' => $new_message['from_client_id'],
+                        'to_cid'   => $new_message['to_client_id'],
+                        'from_name' => $new_message['from_client_name'],
+                        'time'     => $new_message['time']
+                    ))->query();
                     Gateway::sendToClient($message_data['to_client_id'], json_encode($new_message));
                     $new_message['content'] = "<b>你对".htmlspecialchars($message_data['to_client_name'])."说: </b>".nl2br(htmlspecialchars($message_data['content']));
                     return Gateway::sendToCurrentClient(json_encode($new_message));
                 }
-                
+
                 $new_message = array(
-                    'type'=>'say', 
+                    'type'=>'say',
                     'from_client_id'=>$client_id,
                     'from_client_name' =>$client_name,
                     'to_client_id'=>'all',
@@ -119,7 +126,7 @@ class Events
                 return Gateway::sendToGroup($room_id ,json_encode($new_message));
         }
    }
-   
+
    /**
     * 当客户端断开连接时
     * @param integer $client_id 客户端id
@@ -128,7 +135,7 @@ class Events
    {
        // debug
        echo "client:{$_SERVER['REMOTE_ADDR']}:{$_SERVER['REMOTE_PORT']} gateway:{$_SERVER['GATEWAY_ADDR']}:{$_SERVER['GATEWAY_PORT']}  client_id:$client_id onClose:''\n";
-       
+
        // 从房间的客户端列表中删除
        if(isset($_SESSION['room_id']))
        {
@@ -137,5 +144,5 @@ class Events
            Gateway::sendToGroup($room_id, json_encode($new_message));
        }
    }
-  
+
 }
