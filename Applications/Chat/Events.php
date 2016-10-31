@@ -104,13 +104,7 @@ class Events
                         'content'=>"<b>对你说: </b>".nl2br(htmlspecialchars($message_data['content'])),
                         'time'=>date('Y-m-d H:i:s'),
                     );
-                    Db::instance('db1')->insert('chat_messages')->cols(array(
-                        'from_cid' => $new_message['from_client_id'],
-                        'to_cid'   => $new_message['to_client_id'],
-                        'from_name' => $new_message['from_client_name'],
-                        'content'  => nl2br(htmlspecialchars($message_data['content'])),
-                        'time'     => $new_message['time']
-                    ))->query();
+                    self::recordMessage($new_message);
                     Gateway::sendToClient($message_data['to_client_id'], json_encode($new_message));
                     $new_message['content'] = "<b>你对".htmlspecialchars($message_data['to_client_name'])."说: </b>".nl2br(htmlspecialchars($message_data['content']));
                     return Gateway::sendToCurrentClient(json_encode($new_message));
@@ -124,8 +118,20 @@ class Events
                     'content'=>nl2br(htmlspecialchars($message_data['content'])),
                     'time'=>date('Y-m-d H:i:s'),
                 );
+                self::recordMessage($new_message);
                 return Gateway::sendToGroup($room_id ,json_encode($new_message));
         }
+   }
+
+   public static function recordMessage($new_message)
+   {
+     Db::instance('db1')->insert('chat_messages')->cols(array(
+         'from_cid' => $new_message['from_client_id'],
+         'to_cid'   => $new_message['to_client_id'],
+         'from_name' => $new_message['from_client_name'],
+         'content'  => $new_message['content'],
+         'time'     => $new_message['time']
+     ))->query();
    }
 
    /**
